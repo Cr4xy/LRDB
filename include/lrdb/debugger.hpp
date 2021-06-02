@@ -56,15 +56,18 @@ inline json::value to_json(lua_State* L, int index, int max_recursive = 1) {
         }
         if (std::isinf(n)) {
           return json::value("Infinity");
-        } else {
-          return json::value(n);
         }
+        return json::value(n);
       }
     case LUA_TSTRING:
       return json::value(lua_tostring(L, index));
     case LUA_TTABLE: {
       if (max_recursive <= 0) {
         char buffer[128] = {};
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4996)
+#endif
         sprintf(buffer, "%p", lua_topointer(L, -1));
         json::object obj;
 
@@ -94,8 +97,8 @@ inline json::value to_json(lua_State* L, int index, int max_recursive = 1) {
           lua_pushvalue(L, -2);
           // stack now contains: -1 => key; -2 => value; -3 => key; -4 => table
           int keyType = lua_type(L, -1);
-          const char *keytype = lua_typename(L, lua_type(L, -1));
-          const char *valuetype = lua_typename(L, lua_type(L, -2));
+          //const char *keytype = lua_typename(L, lua_type(L, -1));
+          //const char *valuetype = lua_typename(L, lua_type(L, -2));
           //const char *key = lua_tostring(L, -1);
           //const char *value = lua_tostring(L, -2);
           //FILE* test = fopen("luadebug.tmpfile", "a");
@@ -106,21 +109,17 @@ inline json::value to_json(lua_State* L, int index, int max_recursive = 1) {
             case LUA_TSTRING:
             {
               const char *key = lua_tostring(L, -1);
-              std::string s = key;
-              s.insert(0, "\"");
-              s.append("\"");
-              t_obj[s.c_str()] = to_json(L, -2, max_recursive - 1);
+              std::string s = "\"" + std::string(key) + "\"";
+              t_obj[s] = to_json(L, -2, max_recursive - 1);
               break;
             }
             case LUA_TNUMBER:
             {
-              //const char *key = lua_tostring(L, -1);
-              //t_obj[key] = to_json(L, -2, max_recursive - 1);
-              //break;
               const double keyNumeric = lua_tonumber(L, -1);
               char key[32];
-              sprintf(key, "%d", keyNumeric);
+              sprintf(key, "%.16g", keyNumeric);
               t_obj[key] = to_json(L, -2, max_recursive - 1);
+              //t_obj[std::to_string(keyNumeric)] = to_json(L, -2, max_recursive - 1);
               break;
             }
             case LUA_TTABLE:
@@ -131,9 +130,9 @@ inline json::value to_json(lua_State* L, int index, int max_recursive = 1) {
               if (tt != LUA_TNIL) {
                 lua_pop(L, 1); /* remove '__name' */
               }
+              //std::string keyBuffer = "[" + std::string(type) + std::to_string((intptr_t)lua_topointer(L, -1)) + "]";
               char keyBuffer[128] = {};
               sprintf(keyBuffer, "[%s: %p]", type, lua_topointer(L, -1));
-              
               t_obj[keyBuffer] = to_json(L, -2, max_recursive - 1);
               break;
             }
@@ -182,12 +181,16 @@ inline json::value to_json(lua_State* L, int index, int max_recursive = 1) {
     case LUA_TLIGHTUSERDATA:
     case LUA_TTHREAD:
     case LUA_TFUNCTION: {
-      // TODO: make buildin functions display properly, e.g. "function: builtin#42"
+      // TODO: make builtin functions display properly, e.g. "function: builtin#42"
       int tt = luaL_getmetafield(L, index, "__name");
+
       const char* type =
           (tt == LUA_TSTRING) ? lua_tostring(L, -1) : luaL_typename(L, index);
       char buffer[128] = {};
       sprintf(buffer, "%s: %p", type, lua_topointer(L, index));
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
       if (tt != LUA_TNIL) {
         lua_pop(L, 1); /* remove '__name' */
       }
